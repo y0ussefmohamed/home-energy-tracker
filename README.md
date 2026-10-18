@@ -1,7 +1,5 @@
 # Home Energy Tracker
 
-My implementation of LeetJourney's [Home Energy Tracker course](https://www.youtube.com/playlist?list=PLJce2FcDFtxL94MVNXRzIM0WR2qNyz5i_), following the [instructor's repository](https://github.com/leetjourney/home-energy-tracker) while using my own naming and separate request/response DTOs.
-
 ## Current progress
 
 - **User-Service:** user CRUD, Flyway migration, service logging, and controller execution timing through AOP.
