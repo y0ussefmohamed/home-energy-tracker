@@ -34,5 +34,6 @@
 /backups/
 /docker/mysql/data/
 /docker/mysql/logs/
+/docker/kafka_data/
 *.sql.gz
 *.dump
