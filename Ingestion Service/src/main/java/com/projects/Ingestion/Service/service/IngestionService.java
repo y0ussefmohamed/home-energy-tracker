@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class IngestionService {
     private final KafkaTemplate<String, EnergyUsageEvent> kafkaTemplate;
 
@@ -21,6 +20,5 @@ public class IngestionService {
                 .build();
 
         kafkaTemplate.send("energy-usage", event);
-        log.info("Ingested Energy Usage Event: {}", event);
     }
 }
