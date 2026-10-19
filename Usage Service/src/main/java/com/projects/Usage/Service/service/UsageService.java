@@ -55,6 +55,7 @@ public class UsageService { // Producer & Consumer of Kafka Topics
         influxDBClient.getWriteApiBlocking().writePoint(influxBucket, influxOrg, point);
     }
 
+    // Every 10 seconds if it finds a user that has consumption > threshold then send an alert event to kafka
     @Scheduled(cron = "*/10 * * * * *")
     public void aggregateDeviceEnergyUsage() {
         // 1. Query InfluxDB for total energy per device over the last hour

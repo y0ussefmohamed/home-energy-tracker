@@ -81,5 +81,12 @@ services:
     volumes:
       - ./docker/influxdb_data:/var/lib/influxdb2
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: home-energy-mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
 volumes:
   db-data:
