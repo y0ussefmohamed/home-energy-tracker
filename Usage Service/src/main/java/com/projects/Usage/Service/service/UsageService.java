@@ -7,6 +7,8 @@ import com.influxdb.client.write.Point;
 import com.influxdb.query.FluxRecord;
 import com.influxdb.query.FluxTable;
 import com.projects.Usage.Service.DTO.DeviceResponse;
+import com.projects.Usage.Service.DTO.DeviceUsageResponse;
+import com.projects.Usage.Service.DTO.UserDevicesResponse;
 import com.projects.Usage.Service.DTO.UserResponse;
 import com.projects.Usage.Service.client.DeviceClient;
 import com.projects.Usage.Service.client.UserClient;
@@ -26,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -168,5 +171,103 @@ public class UsageService { // Producer & Consumer of Kafka Topics
                         userId, totalConsumption, threshold);
             }
         }
+    }
+
+    public UserDevicesResponse getUserDevicesUsage(Long userId, int days) {
+        log.info("Get user devices usage for ID: {} for past {} days", userId, days);
+
+        // 1. Get all devices for this user
+        final List<DeviceResponse> devices = deviceClient.getAllDevicesForUser(userId);
+
+        if (devices == null || devices.isEmpty()) {
+            return UserDevicesResponse.builder()
+                    .userId(userId)
+                    .devices(List.of())
+                    .build();
+        }
+
+        // 2. Create separate response objects for the devices and their usage
+        final List<DeviceUsageResponse> deviceUsages = devices.stream()
+                .map(device -> DeviceUsageResponse.builder()
+                        .id(device.getId())
+                        .name(device.getName())
+                        .type(device.getType())
+                        .location(device.getLocation())
+                        .build())
+                .toList();
+
+        final List<String> deviceIds = deviceUsages.stream()
+                .map(DeviceUsageResponse::getId)
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .toList();
+
+        if (deviceIds.isEmpty()) {
+            return UserDevicesResponse.builder()
+                    .userId(userId)
+                    .devices(deviceUsages)
+                    .build();
+        }
+
+        final String deviceFilter = deviceIds.stream()
+                .map(id -> String.format("r[\"deviceId\"] == \"%s\"", id))
+                .collect(Collectors.joining(" or "));
+
+        // 3. Sum consumption per device over the requested number of days
+        final Instant now = Instant.now();
+        final Instant start = now.minusSeconds((long) days * 24 * 3600);
+
+        final String fluxQuery = String.format("""
+                from(bucket: "%s")
+                  |> range(start: time(v: "%s"), stop: time(v: "%s"))
+                  |> filter(fn: (r) => r["_measurement"] == "energy_usage")
+                  |> filter(fn: (r) => r["_field"] == "energyConsumed")
+                  |> filter(fn: (r) => %s)
+                  |> group(columns: ["deviceId"])
+                  |> sum(column: "_value")
+                """, influxBucket, start.toString(), now.toString(), deviceFilter);
+
+        // 4. Convert the query results into a map of device ID to total consumption
+        final Map<Long, Double> aggregatedUsage = new HashMap<>();
+
+        try {
+            final List<FluxTable> tables = influxDBClient.getQueryApi().query(fluxQuery, influxOrg);
+
+            for (FluxTable table : tables) {
+                for (FluxRecord record : table.getRecords()) {
+                    Object deviceIdValue = record.getValueByKey("deviceId");
+                    if (deviceIdValue == null) {
+                        continue;
+                    }
+
+                    Object energyValue = record.getValueByKey("_value");
+                    double energyConsumed = energyValue instanceof Number
+                            ? ((Number) energyValue).doubleValue() : 0.0;
+
+                    try {
+                        Long deviceId = Long.valueOf(deviceIdValue.toString());
+                        aggregatedUsage.merge(deviceId, energyConsumed, Double::sum);
+                    } catch (NumberFormatException e) {
+                        log.warn("Failed to parse device ID from InfluxDB record: {}", deviceIdValue);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to query InfluxDB for user {} usage over {} days: {}",
+                    userId, days, e.getMessage());
+            aggregatedUsage.clear();
+        }
+
+        // 5. Add each device's total, defaulting to zero when no usage is available
+        deviceUsages.forEach(device -> device.setEnergyConsumed(
+                aggregatedUsage.getOrDefault(device.getId(), 0.0)));
+
+        log.info("Aggregated energy consumption for user ID {}: {}", userId, aggregatedUsage);
+
+        // 6. Return the user ID and the devices with their consumption totals
+        return UserDevicesResponse.builder()
+                .userId(userId)
+                .devices(deviceUsages)
+                .build();
     }
 }

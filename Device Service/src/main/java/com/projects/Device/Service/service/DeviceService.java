@@ -8,6 +8,8 @@ import com.projects.Device.Service.repository.DeviceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
@@ -17,6 +19,12 @@ public class DeviceService {
         Device device = deviceRepository.findById(deviceId)
                 .orElseThrow(() -> new DeviceNotFoundException("Device not found with id: " + deviceId));
         return this.toDeviceResponse(device);
+    }
+
+    public List<DeviceResponse> getAllDevicesByUserId(final Long userId) {
+        return deviceRepository.findAllByUserId(userId).stream()
+                .map(this::toDeviceResponse)
+                .toList();
     }
 
     public DeviceResponse createDevice(final DeviceRequest deviceRequest) {

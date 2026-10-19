@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.List;
+
 @Component
 public class DeviceClient {
 
@@ -27,5 +29,17 @@ public class DeviceClient {
 
         ResponseEntity<DeviceResponse> response = restTemplate.getForEntity(url, DeviceResponse.class);
         return response.getBody();
+    }
+
+    public List<DeviceResponse> getAllDevicesForUser(Long userId) {
+        String url = UriComponentsBuilder
+                .fromUriString(baseUrl)
+                .path("/user/{userId}")
+                .buildAndExpand(userId)
+                .toUriString();
+
+        ResponseEntity<DeviceResponse[]> response = restTemplate.getForEntity(url, DeviceResponse[].class);
+        DeviceResponse[] devices = response.getBody();
+        return devices == null ? List.of() : List.of(devices);
     }
 }

@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/device")
 @RequiredArgsConstructor
@@ -20,6 +22,12 @@ public class DeviceController {
     public ResponseEntity<DeviceResponse> getDeviceById(@PathVariable Long id) {
         DeviceResponse deviceResponse = deviceService.getDeviceById(id);
         return ResponseEntity.ok(deviceResponse);
+    }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<DeviceResponse>> getAllDevicesByUserId(@PathVariable Long userId) {
+        List<DeviceResponse> devices = deviceService.getAllDevicesByUserId(userId);
+        return ResponseEntity.ok(devices);
     }
 
     @PostMapping
