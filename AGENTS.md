@@ -10,7 +10,7 @@ This guide applies to the entire repository. It records the implemented architec
 - The order of changes matters to the user. Explain changes in dependency order and identify exactly what was added.
 - Whenever the user announces a move to the next lesson, check the current project state and report mistakes before implementing the next lesson.
 - Preserve the user's intentional differences from the instructor: standard DTO classes, separate requests/responses, plural SQL tables, and existing folder/package names.
-- **Recorded checkpoint: 2026-10-21, lesson 14 monitoring implementation is complete and verified; the user is watching lesson 14.** Update this checkpoint as the user advances. Do not implement future lessons automatically.
+- **Recorded checkpoint: 2026-10-21, lesson 14 monitoring is complete; the user is preparing to start lesson 15 and authorized an AI response truncation fix.** Update this checkpoint as the user advances. Do not implement future lessons automatically.
 - Instructor references: [playlist](https://www.youtube.com/playlist?list=PLJce2FcDFtxL94MVNXRzIM0WR2qNyz5i_) and [repository](https://github.com/leetjourney/home-energy-tracker). For instructor-specific questions, inspect the relevant video/transcript and lesson tag or commit. Do not copy later code from the instructor's default branch into an earlier lesson.
 - Inspect Git status before editing and preserve existing work. Do not reset files, commit, or push unless requested.
 - Use the user's IntelliJ HTTP-client plugin for interactive API work; Postman is unnecessary.
@@ -187,11 +187,14 @@ The simulator defaults to **10,000 requests per 60 seconds**, divided among **10
 - Insight fetches the last **3 days** through `UsageClient.getUserUsage(userId, 3)`.
 - Both insight endpoints use `InsightService.createInsightResponse`. The numeric `energyUsage` is calculated in Java from device totals; the model supplies the `tips` text.
 - `OllamaConfig` creates the configured Spring AI `ChatClient`. Use that bean so the system instructions apply.
-- Current settings: model `qwen2.5:1.5b`, temperature `0.2`, `num-predict=256`, and automatic model pulling disabled with `pull-model-strategy=never`.
-- An empty device list returns explanatory text without calling Ollama. Missing usage data or blank model output raises an error.
+- Current settings: model `qwen2.5:1.5b`, temperature `0.2`, `num-predict=512`, and automatic model pulling disabled with `pull-model-strategy=never`.
+- Prompts include only the three highest-consuming devices (name, type, and period total), plus the household total and full device count. Calculate numeric `energyUsage` from **all** devices before selecting the top three.
+- Saving tips request three numbered, single-sentence actions; overview requests two short sentences with one action. Avoid introductions, repeated device inventories/figures, unsupported units or savings estimates, and advice about unlisted device types.
+- Read the full `ChatResponse` and its generation finish reason. A `length` finish reason returns `502 BAD_GATEWAY` instead of passing incomplete advice to the caller. Missing or blank model responses also return `502`.
+- An empty device list returns explanatory text without calling Ollama. Missing usage data raises an error.
 - Keep recorded totals distinct from daily averages. Do not invent units, tariffs, or missing data.
 
-**Known open limitation:** replies can spend the output budget listing devices and be truncated before giving useful saving tips. Prompt instructions do not guarantee the model follows them. Inspect actual answer content when validating AI work; HTTP `200` and nonempty text alone are insufficient.
+**Remaining model-quality limitation:** `qwen2.5:1.5b` can still suggest unrelated devices or inappropriate replacements and repeat figures despite the prompt rules. The truncation guard does not validate the meaning of its advice. Inspect actual answer content and completion metadata when validating AI work; HTTP `200` and nonempty text alone are insufficient.
 
 ## 9. Gateway, security, and OpenAPI
 

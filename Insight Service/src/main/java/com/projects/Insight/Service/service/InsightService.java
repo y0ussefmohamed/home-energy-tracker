@@ -7,7 +7,14 @@ import com.projects.Insight.Service.client.UsageClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Comparator;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -20,8 +27,9 @@ public class InsightService {
         log.info("Get energy saving tips for user ID: {}", userId);
 
         return createInsightResponse(userId, """
-                Give three practical ways to reduce this household's energy consumption.
-                Prioritize the devices with the highest recorded consumption.
+                Return exactly three numbered energy-saving tips, one short sentence each.
+                Start immediately with "1." and give practical actions for the listed devices.
+                Do not add a heading, introduction, or device-by-device consumption list.
                 """);
     }
 
@@ -29,8 +37,9 @@ public class InsightService {
         log.info("Get energy usage overview for user ID: {}", userId);
 
         return createInsightResponse(userId, """
-                Give a concise overview of this household's energy usage.
-                Identify the devices consuming the most energy and suggest one action.
+                Return a brief overview in two short sentences, without a heading or list.
+                First describe which devices contribute most to the household's recorded usage.
+                Then suggest one practical action to reduce consumption.
                 """);
     }
 
@@ -53,26 +62,57 @@ public class InsightService {
                     .build();
         }
 
-        // 2. Supply the real usage figures alongside the requested kind of advice.
+        // 2. Keep the prompt focused; the household total still includes every device.
+        final String deviceSummary = usageResponse.getDevices().stream()
+                .sorted(Comparator.comparingDouble(DeviceUsageResponse::getEnergyConsumed).reversed())
+                .limit(3)
+                .map(device -> "- %s (%s): %s".formatted(
+                        device.getName(), device.getType(), device.getEnergyConsumed()))
+                .collect(Collectors.joining("\n"));
+
         final String prompt = """
-                %s
                 Reporting period: the past 3 days.
                 All values are totals over that period, not daily averages.
-                Total energy consumed: %s
-                Device usage: %s
-                Keep the answer under 150 words.
-                """.formatted(instruction, totalUsage, usageResponse.getDevices());
+                Household total across all %d devices: %s
+                Highest-consuming devices (up to three; other devices are omitted):
+                %s
+
+                Answer request:
+                %s
+                Answer rules:
+                Use only the listed device names and types; do not introduce other devices.
+                Focus actions on devices with positive recorded usage.
+                Use conditional wording for device features that are not specified.
+                Do not repeat consumption figures, measurement units, percentages, or savings estimates.
+                Numbers are allowed only as the requested numbered-list markers.
+                Keep the answer under 100 words.
+                """.formatted(usageResponse.getDevices().size(), totalUsage, deviceSummary, instruction);
 
         log.info("Calling Ollama for user ID: {} with total usage: {}", userId, totalUsage);
 
         // 3. This bean also adds the system instructions from OllamaConfig.
-        final String tips = chatClient.prompt()
+        final ChatResponse chatResponse = chatClient.prompt()
                 .user(prompt)
                 .call()
-                .content();
+                .chatResponse();
 
+        if (chatResponse == null || chatResponse.getResult() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Ollama returned no response");
+
+        // 4. A token-limit stop means the text is incomplete, even if Ollama returned HTTP 200.
+        final Generation generation = chatResponse.getResult();
+        final String finishReason = generation.getMetadata().getFinishReason();
+        log.debug("Ollama response finish reason for user ID {}: {}", userId, finishReason);
+
+        if ("length".equalsIgnoreCase(finishReason)) {
+            log.warn("Ollama response reached the output limit for user ID: {}", userId);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "AI response reached its output limit. Please try again.");
+        }
+
+        final String tips = generation.getOutput().getText();
         if (tips == null || tips.isBlank())
-            throw new IllegalStateException("Ollama returned an empty response for user ID: " + userId);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Ollama returned an empty response");
 
         return InsightResponse.builder()
                 .userId(userId)

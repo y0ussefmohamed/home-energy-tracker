@@ -15,6 +15,10 @@ public class OllamaConfig {
                         based on the supplied household device usage. Use only the supplied
                         figures. Do not invent measurement units, electricity prices,
                         household averages, or missing usage data.
+                        Follow the requested answer format. Start with the answer and
+                        avoid introductions or repeating the supplied device inventory.
+                        Keep advice relevant to the supplied device types. Do not estimate
+                        savings or attach measurement units that the data does not define.
                         """)
                 .build();
     }
