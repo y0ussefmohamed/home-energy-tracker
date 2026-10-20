@@ -10,7 +10,7 @@ This guide applies to the entire repository. It records the implemented architec
 - The order of changes matters to the user. Explain changes in dependency order and identify exactly what was added.
 - Whenever the user announces a move to the next lesson, check the current project state and report mistakes before implementing the next lesson.
 - Preserve the user's intentional differences from the instructor: standard DTO classes, separate requests/responses, plural SQL tables, and existing folder/package names.
-- **Recorded checkpoint: 2026-10-20, completed through lesson 13; the user is starting lesson 14.** Update this checkpoint as the user advances. Do not implement future lessons automatically.
+- **Recorded checkpoint: 2026-10-21, lesson 14 monitoring implementation is complete and verified; the user is watching lesson 14.** Update this checkpoint as the user advances. Do not implement future lessons automatically.
 - Instructor references: [playlist](https://www.youtube.com/playlist?list=PLJce2FcDFtxL94MVNXRzIM0WR2qNyz5i_) and [repository](https://github.com/leetjourney/home-energy-tracker). For instructor-specific questions, inspect the relevant video/transcript and lesson tag or commit. Do not copy later code from the instructor's default branch into an earlier lesson.
 - Inspect Git status before editing and preserve existing work. Do not reset files, commit, or push unless requested.
 - Use the user's IntelliJ HTTP-client plugin for interactive API work; Postman is unnecessary.
@@ -87,6 +87,8 @@ The following credentials are existing local tutorial defaults, not production c
 | Ollama | `http://localhost:11434` on the host | Model `qwen2.5:1.5b`; no Compose service |
 | Keycloak | `http://localhost:8091` / `home-energy-keycloak` | Keycloak 24.0.1; local admin `admin` / `admin`; realm `het-security-realm` |
 | Keycloak MySQL | Docker-only `keycloak-db:3306` / `home-energy-keycloak-mysql` | Database `keycloak`; application account `keycloak` / `password`; separate from application MySQL |
+| Prometheus | `http://localhost:9090` / `home-energy-prometheus` | Prometheus 3.1.0; scrapes every 15 seconds; retains metrics for 5 days |
+| Grafana | `http://localhost:3000` / `home-energy-grafana` | Grafana 11.4.0; local admin `admin` / `admin`; provisioned Home Energy Tracker dashboard |
 
 Persistent storage:
 
@@ -94,6 +96,7 @@ Persistent storage:
 - Kafka: `docker/kafka_data/`.
 - InfluxDB: `docker/influxdb_data/`.
 - Keycloak MySQL: `volume-data/mysql_keycloak_data/`.
+- Prometheus and Grafana: Compose named volumes `prometheus-data` and `grafana-data`.
 - Private migration backups: `backups/`; private realm-import directory: `docker/keycloak/realms/`. Both are Git-ignored through the root ignore rules.
 
 Keycloak uses `KC_DB=mysql` and `KC_DB_URL=jdbc:mysql://keycloak-db:3306/keycloak`. Its database health check executes an authenticated query before Keycloak starts. Legacy `DB_VENDOR` / `DB_ADDR` variables do not configure this Keycloak image.
@@ -214,9 +217,22 @@ OpenAPI:
 - Each corresponding `OpenApiConfig` sets the server to `http://localhost:9000` (overridable with `gateway.url`), declares HTTP Bearer/JWT authentication, and applies the security requirement.
 - In **Authorize**, enter the access token; Swagger adds the `Bearer` prefix. **Try it out** must target the gateway.
 - Usage has separate direct documentation on `8083`; do not point it at the gateway unless a Usage route is added intentionally.
-- Gateway exposes Actuator `health`, `info`, `metrics`, and `circuitbreakers`. Useful checks: `/actuator/health` and `/actuator/circuitbreakers`. Prometheus/Grafana observability is not yet implemented at the recorded checkpoint.
+- Gateway exposes Actuator `health`, `info`, `metrics`, `circuitbreakers`, and `prometheus`. Useful checks: `/actuator/health`, `/actuator/circuitbreakers`, and `/actuator/prometheus`.
 
-## 10. Coding conventions
+## 10. Monitoring (lesson 14)
+
+- All seven services include Actuator and `micrometer-registry-prometheus`, with versions managed by Spring Boot. The gateway already had Actuator before this lesson.
+- All services expose `/actuator/prometheus` and add `management.metrics.tags.application=${spring.application.name}`. Preserve the user's application names; Prometheus job names use lowercase names independently.
+- The six downstream services expose `health,info,prometheus` with health details set to `when_authorized`. Preserve the gateway's additional Actuator endpoints, circuit breakers, security exclusions, and AI timeout.
+- `docker/prometheus/prometheus.yml` scrapes Prometheus itself plus the seven host-run Java applications. Docker-to-host targets use `host.docker.internal` with ports `8080`–`8085` and `9000`, not container-local `localhost`.
+- Grafana provisioning files are `docker/grafana/provisioning/datasources/prometheus.yml`, `docker/grafana/provisioning/dashboards/dashboards.yml`, and `docker/grafana/provisioning/dashboards/json/het-overview.json`.
+- Grafana's data source UID is `prometheus`, URL `http://prometheus:9090`; dashboard UID is `het-overview`, title **Home Energy Tracker - Overview**, folder **Home Energy Tracker**. Keep dashboard/data-source UIDs aligned.
+- Dashboard panels cover HTTP rates by application/status, JVM heap usage, scrape target reachability, 4xx/5xx rates, and the busiest endpoints.
+- Prometheus target health is available at `http://localhost:9090/targets`; the API is `/api/v1/targets`. With all applications running, expect seven application targets plus Prometheus itself to be `UP`.
+- Scrape `UP` means the metrics endpoint is reachable; it does not prove all business flows work. Request-rate panels need traffic and at least two scrapes; an unused error series can initially have no data.
+- After dependency/property changes, reload Maven and restart the Java applications. Do not implement new Java business logic as part of this configuration lesson.
+
+## 11. Coding conventions
 
 1. **No Java records.** DTOs and Kafka events use standard classes with Lombok `@Data`, `@Builder`, `@NoArgsConstructor`, and `@AllArgsConstructor`.
 2. **Uppercase `DTO` package.** Keep `*Request` and `*Response` separate. Preserve the actual service base packages and casing.
@@ -229,7 +245,7 @@ OpenAPI:
 9. **AOP scope.** User and Device have service-call logging in `AOP/LoggingAspect` and controller timing in `AOP/ExecutionTimeAspect`. Check pointcuts after package changes and avoid duplicating their logs unnecessarily.
 10. **Bounded changes.** Do not rename packages, introduce shared modules, upgrade frameworks, alter security policy, or redesign persistence as incidental cleanup.
 
-## 11. Verification and troubleshooting
+## 12. Verification and troubleshooting
 
 - For documentation-only edits, check facts, paths, and `git diff --check`; no application build is needed.
 - For implementation changes, compile/package affected services with tests skipped. Check all affected contract copies and callers.
@@ -237,6 +253,7 @@ OpenAPI:
 - Use existing data for read checks. Do not generate sample users/devices, flood ingestion, send mail, or modify records just to prove startup.
 - For gateway/security changes, check missing/invalid-token `401`, valid-token forwarding, matching service-specific `503` fallbacks, and the Swagger server/security definitions. Use malformed JSON to check POST routing without producing a valid reading.
 - For AI changes, check both insight endpoints through the gateway, compare numeric usage with Usage Service, and inspect whether the generated text actually answers the requested question.
+- For monitoring changes, validate Compose and the Prometheus configuration, confirm all target scrapes, application labels, Grafana provisioning, and actual dashboard queries. Check a controlled stop/restart using only agent-started services to verify `UP`/`DOWN` transitions.
 - For alerting changes, verify both the email result and persisted `sent` status using an intentional, bounded scenario.
 - Usage currently catches InfluxDB query failures in `getUserDevicesUsage` and returns zero device totals. Check logs before treating zeros as proof of no consumption; this behavior is not a health guarantee.
 - If a port is occupied, identify its owning process and service before stopping it. Do not kill all Java processes or change agreed ports to conceal a duplicate instance.
