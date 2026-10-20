@@ -37,5 +37,7 @@
 /docker/kafka_data/
 /docker/influxdb_data/
 /influxdb_data/
+/volume-data/
+/docker/keycloak/
 *.sql.gz
 *.dump
