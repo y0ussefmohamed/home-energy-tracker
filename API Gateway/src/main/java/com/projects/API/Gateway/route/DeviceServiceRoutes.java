@@ -25,15 +25,15 @@ public class DeviceServiceRoutes {
                 .before(uri("http://localhost:8081"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "deviceServiceCircuitBreaker",
-                        URI.create("forward:/fallbackRoute")
+                        URI.create("forward:/fallback/device")
                 ))
                 .build();
     }
 
     @Bean
     public RouterFunction<ServerResponse> deviceFallbackRoute() {
-        return route("fallbackRoute")
-                .route(RequestPredicates.path("/fallbackRoute"),
+        return route("device-service-fallback")
+                .route(RequestPredicates.path("/fallback/device"),
                         request -> ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE)
                                 .body("Device service is down"))
                 .build();

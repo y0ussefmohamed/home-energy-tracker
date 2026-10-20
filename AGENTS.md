@@ -1,92 +1,245 @@
-# AGENTS.md — Guidance for Automated Coding & Operational Agents
+# AGENTS.md — Home Energy Tracker
 
-**Purpose:** Give AI coding agents the exact architecture, dataflows, commands, and strict coding conventions needed to build, run, and maintain the **Home Energy Tracker** microservices repository without guessing or hallucinating.
+This guide applies to the entire repository. It records the implemented architecture and the user's working conventions. Verify details against the current source before changing them; update this guide when an authorized change makes it outdated.
 
----
+## 1. Working with the user
 
-## 1. Quick Start & Commands
+- **Do not use sub-agents or delegate implementation.**
+- **Do not create, modify, or enable tests unless the user requests it.** Existing data-population tests must remain disabled unless explicitly requested.
+- Work within the user's current lesson and requested scope. A request for a skeleton means no implementation; a request for an explanation does not authorize unrelated code changes.
+- The order of changes matters to the user. Explain changes in dependency order and identify exactly what was added.
+- Whenever the user announces a move to the next lesson, check the current project state and report mistakes before implementing the next lesson.
+- Preserve the user's intentional differences from the instructor: standard DTO classes, separate requests/responses, plural SQL tables, and existing folder/package names.
+- **Recorded checkpoint: 2026-10-20, completed through lesson 13; the user is starting lesson 14.** Update this checkpoint as the user advances. Do not implement future lessons automatically.
+- Instructor references: [playlist](https://www.youtube.com/playlist?list=PLJce2FcDFtxL94MVNXRzIM0WR2qNyz5i_) and [repository](https://github.com/leetjourney/home-energy-tracker). For instructor-specific questions, inspect the relevant video/transcript and lesson tag or commit. Do not copy later code from the instructor's default branch into an earlier lesson.
+- Inspect Git status before editing and preserve existing work. Do not reset files, commit, or push unless requested.
+- Use the user's IntelliJ HTTP-client plugin for interactive API work; Postman is unnecessary.
+- Report what was actually verified and any remaining limitations. A successful build or HTTP response does not establish that every behavior is correct.
 
-### Infrastructure (Docker Compose)
-- **Start all infrastructure:** `docker compose up -d` (from repository root)
-- **Stop all infrastructure:** `docker compose down`
-- **Database bootstrap:** `docker/mysql/init.sql` (MySQL database `home_energy_tracker`) and Flyway migrations in `User Service/src/main/resources/db/migration/` (`V1__user_table.sql`, `V2__device_table.sql`, `V3__alert_table.sql`).
+## 2. Repository layout and technology
 
-### Build & Run a Microservice
-Each microservice is an independent Maven project in its own top-level folder with its own Maven Wrapper (`./mvnw`):
-- **Compile:** `cd "<Service Folder>" && ./mvnw -DskipTests compile`
-- **Package:** `cd "<Service Folder>" && ./mvnw -DskipTests package`
-- **Run:** `cd "<Service Folder>" && ./mvnw spring-boot:run`
+Each service is an independent Maven project with its own `pom.xml`, `mvnw`, and `src/`. There is no root Maven aggregator. Folder names contain spaces; quote paths in commands.
 
----
+| Folder | Base package | Port | Responsibility |
+| --- | --- | --- | --- |
+| `API Gateway` | `com.projects.API.Gateway` | `9000` | Spring Cloud Gateway WebMVC, JWT authentication, circuit breakers, Swagger aggregation, Actuator |
+| `User Service` | `com.energy.User.Service` | `8080` | User CRUD; owns all application Flyway migrations |
+| `Device Service` | `com.projects.Device.Service` | `8081` | Device CRUD and device lookup by user |
+| `Ingestion Service` | `com.projects.Ingestion.Service` | `8082` | Receives readings, publishes Kafka events, runs the simulator |
+| `Usage Service` | `com.projects.Usage.Service` | `8083` | Kafka consumption, InfluxDB storage/queries, scheduled threshold checks, alert production |
+| `Alert Service` | `com.projects.Alert.Service` | `8084` | Kafka alert consumption, email delivery through Mailpit, delivery-result persistence |
+| `Insight Service` | `com.projects.Insight.Service` | `8085` | Fetches usage and generates local AI insights through Spring AI/Ollama |
 
-## 2. Microservices Architecture & Ports
+Current POM versions: Java **21**, Spring Boot **4.1.1**, Spring Cloud **2025.1.3** in the gateway, Spring AI **2.0.1** in Insight, and springdoc **3.0.2** in services with OpenAPI documentation. Check the POMs before adding dependencies; do not substitute Spring Boot 3 examples without checking compatibility.
 
-| Service Folder | Base Package | Port | Responsibility & Tech Stack |
-| :--- | :--- | :--- | :--- |
-| **`API Gateway`** | `com.projects.API.Gateway` | `9000` | Single entry point proxy (Spring Cloud Gateway WebMVC), Resilience4j Circuit Breakers, fallback routes, Actuator |
-| **`User Service`** | `com.energy.User.Service` | `8080` | User CRUD, MySQL (`users` table), Flyway schema migrations (`V1`–`V3`) |
-| **`Device Service`** | `com.projects.Device.Service` | `8081` | Device CRUD & lookup by `userId`, MySQL (`devices` table) |
-| **`Ingestion Service`** | `com.projects.Ingestion.Service` | `8082` | Receives energy readings (`POST /api/v1/ingestion`), publishes `EnergyUsageEvent` to Kafka, runs `ParallelDataSimulator` |
-| **`Usage Service`** | `com.projects.Usage.Service` | `8083` | Consumes `energy-usage` from Kafka, writes/queries InfluxDB (`usage-bucket`), scheduled threshold checks, publishes `AlertingEvent`, exposes `GET /api/v1/usage/{userId}` |
-| **`Alert Service`** | `com.projects.Alert.Service` | `8084` | Consumes `energy-alerts` from Kafka, sends email alerts via Mailpit SMTP (`EmailService`), persists sent alerts to MySQL (`alerts` table) |
-| **`Insight Service`** | `com.projects.Insight.Service` | `8085` | Calls `Usage Service` for multi-day per-device usage, prompts local **Ollama** (`qwen2.5:1.5b`) via Spring AI (`OllamaChatModel`) for energy-saving tips |
+## 3. Build and startup
 
----
+From the repository root:
 
-## 3. Infrastructure Ports (`docker-compose.yml`)
+```sh
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+```
 
-- **MySQL (`home-energy-mysql`):** `localhost:3306` (DB: `home_energy_tracker`, user/pass: `root` / `rootpassword` or `energy_user` / `energy_pass`)
-- **Kafka (`home-energy-kafka`):** `localhost:9094` (external host listener) / `kafka:9092` (internal Docker network)
-- **Kafka UI (`home-energy-kafka-ui`):** `http://localhost:8070`
-- **InfluxDB (`home-energy-influxdb`):** `http://localhost:8072` (org: `home-energy`, bucket: `usage-bucket`)
-- **Mailpit (`home-energy-mailpit`):** SMTP `localhost:1025`, Web UI `http://localhost:8025`
-- **Ollama (Host):** `http://localhost:11434` (model: `qwen2.5:1.5b`)
+Docker Compose runs infrastructure only. Java services run separately in IntelliJ or through Maven. Ollama also runs separately on the host.
 
----
+From any service folder, using JDK 21:
 
-## 4. Critical Integration Points & Dataflows
+```sh
+./mvnw -Dmaven.test.skip=true compile
+./mvnw -Dmaven.test.skip=true package
+./mvnw -Dmaven.test.skip=true spring-boot:run
+```
 
-### A. Real-Time Energy Ingestion & Alerting Pipeline
-1. **Ingestion (`Ingestion Service`):**
-   - `POST /api/v1/ingestion` (or `ParallelDataSimulator`) sends `EnergyUsageRequest` to `IngestionService`.
-   - `IngestionService` publishes `EnergyUsageEvent` (`com.projects.kafka.event.EnergyUsageEvent`) to Kafka topic **`energy-usage`**.
-2. **Storage & Threshold Aggregation (`Usage Service`):**
-   - `UsageService.consumeEnergyUsageEvent` consumes from **`energy-usage`** and writes points to InfluxDB (`energy_usage` measurement).
-   - Scheduled job `UsageService.aggregateDeviceEnergyUsage` queries InfluxDB, fetches device & user metadata via REST clients (`DeviceClient` $\rightarrow$ `8081`, `UserClient` $\rightarrow$ `8080`), and compares usage against each user's threshold.
-   - When threshold is exceeded, `UsageService` publishes `AlertingEvent` (`com.projects.kafka.event.AlertingEvent`) to Kafka topic **`energy-alerts`**.
-3. **Notification & Persistence (`Alert Service`):**
-   - `AlertService.consumeUsageAlertEvent` consumes from **`energy-alerts`**.
-   - Calls `EmailService.sendEmail(...)` (via Mailpit SMTP `1025`), and if sent (`true`), saves an `Alert` entity to the MySQL `alerts` table.
+Use `-o` only when the required dependencies are already cached. `-Dmaven.test.skip=true` skips test compilation and execution.
 
-### B. AI Energy Insights Pipeline
-1. Client calls `GET /api/v1/insight/saving-tips/{userId}` or `GET /api/v1/insight/overview/{userId}` (directly on `8085` or via `API Gateway` on `9000`).
-2. `InsightService` calls `UsageClient` (`GET http://localhost:8083/api/v1/usage/{userId}?days=3`).
-3. `UsageService` calls `DeviceClient` (`GET http://localhost:8081/api/v1/device/user/{userId}`) to fetch all user devices, then queries InfluxDB Flux (`sum()`) over the last `X` days to aggregate total `energyConsumed` per device.
-4. `InsightService` builds a prompt containing the per-device breakdown and calls `OllamaChatModel.call(prompt)` to return an `InsightResponse`.
+Recommended full-pipeline startup order:
 
-### C. API Gateway & Circuit Breakers
-- `API Gateway` (`9000`) routes `/api/v1/user/**` (`8080`), `/api/v1/device/**` (`8081`), `/api/v1/ingestion/**` (`8082`), and `/api/v1/insight/**` (`8085`).
-- Each route is protected by a Resilience4j circuit breaker (`*ServiceCircuitBreaker`) that forwards failures to `/fallbackRoute` returning `503 SERVICE_UNAVAILABLE`.
-- Monitor circuit breakers at: `GET http://localhost:9000/actuator/circuitbreakers`.
+1. Start Docker Desktop and the Compose infrastructure; check actual service readiness.
+2. Ensure host Ollama is running and `qwen2.5:1.5b` is installed. Check with `ollama list`; use `ollama pull qwen2.5:1.5b` if missing. Reuse an existing Ollama process.
+3. Start **User Service** and wait for Flyway to finish.
+4. Start **Device Service**, then **Alert Service** and **Usage Service**.
+5. Start **Insight Service** and **API Gateway** once their dependencies are ready.
+6. Start **Ingestion Service** last when intentionally generating readings.
 
----
+For quiet HTTP diagnostics, start Ingestion with this temporary override:
 
-## 5. Strict Coding Rules & Project Conventions
+```sh
+./mvnw -Dmaven.test.skip=true spring-boot:run -Dspring-boot.run.arguments='--simulation.requests-per-interval=0'
+```
 
-AI agents modifying or adding code in this repository **MUST** follow these rules:
+For Usage or Alert HTTP/startup checks, `--spring.kafka.listener.auto-startup=false` temporarily prevents Kafka consumption. **This does not disable Usage's scheduled aggregation job.** Do not persist diagnostic overrides as normal application settings.
 
-1. **NO Java `record`s:**
-   - Never use Java `record` types for DTOs or Kafka events.
-   - Always use standard Java classes annotated with Lombok (`@Data`, `@Builder`, `@NoArgsConstructor`, `@AllArgsConstructor`).
-2. **Uppercase `DTO` Package & Request/Response Separation:**
-   - Place DTOs inside the uppercase `DTO` package (`com.<group>.<Service>.DTO`).
-   - Keep `*Request` and `*Response` models separate (e.g., `UserRequest` / `UserResponse`, `DeviceRequest` / `DeviceResponse`).
-3. **Shared Kafka Event Package:**
-   - Keep Kafka event classes (`EnergyUsageEvent`, `AlertingEvent`) in package `com.projects.kafka.event` so producer/consumer type mappings align cleanly.
-4. **Plural SQL Table Names:**
-   - Always use plural table names in `@Table(name = "...")` and Flyway SQL migrations: `users`, `devices`, `alerts`.
-5. **Single Responsibility Principle (SRP) & Clean Layering:**
-   - Controllers must only handle HTTP routing/responses and delegate immediately to a `*Service`.
-   - Keep helper services focused on a single responsibility (for example, in `Alert Service`, `EmailService` only sends emails and returns a `boolean`, while `AlertService` handles `AlertRepository` persistence).
-6. **Do Not Write Tests Unless Requested:**
-   - Only add or modify unit/integration tests when explicitly asked by the user.
+Stop infrastructure with `docker compose down`. Avoid `down -v`, pruning storage, truncating tables, renumbering IDs, or deleting bind-mounted data as a troubleshooting shortcut. Stop only temporary Java processes started for verification; leave the user's IntelliJ processes alone.
+
+## 4. Infrastructure and persistence
+
+The following credentials are existing local tutorial defaults, not production configuration. Keep client secrets, tokens, and private realm exports out of source and logs.
+
+| Component | Address / container | Configuration |
+| --- | --- | --- |
+| Application MySQL | `localhost:3306` / `home-energy-mysql` | MySQL 8.3.0; database `home_energy_tracker`; `root` / `password` |
+| Kafka | Host apps: `localhost:9094`; Docker clients: `kafka:9092` / `home-energy-kafka` | Single-node KRaft; controller listener `9093`; replication factor 1 |
+| Kafka UI | `http://localhost:8070` / `home-energy-kafka-ui` | Connects internally to `kafka:9092` |
+| InfluxDB | `http://localhost:8072` / `home-energy-influxdb` | InfluxDB 2.7; org `projects`; bucket `usage-bucket`; token `my-token`; retention `1w` |
+| Mailpit | SMTP `localhost:1025`; UI `http://localhost:8025` / `home-energy-mailpit` | Local captured mail; SMTP authentication and STARTTLS disabled |
+| Ollama | `http://localhost:11434` on the host | Model `qwen2.5:1.5b`; no Compose service |
+| Keycloak | `http://localhost:8091` / `home-energy-keycloak` | Keycloak 24.0.1; local admin `admin` / `admin`; realm `het-security-realm` |
+| Keycloak MySQL | Docker-only `keycloak-db:3306` / `home-energy-keycloak-mysql` | Database `keycloak`; application account `keycloak` / `password`; separate from application MySQL |
+
+Persistent storage:
+
+- Application MySQL: Compose named volume `db-data`.
+- Kafka: `docker/kafka_data/`.
+- InfluxDB: `docker/influxdb_data/`.
+- Keycloak MySQL: `volume-data/mysql_keycloak_data/`.
+- Private migration backups: `backups/`; private realm-import directory: `docker/keycloak/realms/`. Both are Git-ignored through the root ignore rules.
+
+Keycloak uses `KC_DB=mysql` and `KC_DB_URL=jdbc:mysql://keycloak-db:3306/keycloak`. Its database health check executes an authenticated query before Keycloak starts. Legacy `DB_VENDOR` / `DB_ADDR` variables do not configure this Keycloak image.
+
+The original H2 database and full realm/user exports were backed up before migration to MySQL. Preserve the current realms, users, clients, credentials, and signing keys during future changes. Perform full CLI exports/imports with Keycloak stopped; startup `--import-realm` skips existing realms. A fresh checkout does not include private realm exports or existing database contents, so verify realm/client provisioning before expecting JWT authentication to work.
+
+## 5. Database and model ownership
+
+User, Device, and Alert share the application MySQL database in this tutorial. Service responsibilities remain separate; this is not a database-per-service deployment.
+
+**Only User Service owns Flyway migrations**, under `User Service/src/main/resources/db/migration/`:
+
+| Migration | Table | Entity owner |
+| --- | --- | --- |
+| `V1__user_table.sql` | `users` | User Service |
+| `V2__device_table.sql` | `devices` | Device Service |
+| `V3__alert_table.sql` | `alerts` | Alert Service |
+
+- `docker/mysql/init.sql` creates/selects the database on first initialization; Flyway creates the application tables.
+- Existing JPA services use `spring.jpa.hibernate.ddl-auto=none`. Preserve Flyway schema ownership.
+- Add the next numbered migration for schema changes. Do not edit already applied migrations or repair checksums to hide a mismatch.
+- `devices.user_id` has a SQL foreign key to `users.id` with `ON DELETE CASCADE`. `Device` stores a scalar `Long userId`, not a cross-service JPA relationship. Do not introduce `@ManyToOne` / `@JoinColumn` to another service's entity.
+- Preserve plural SQL names and explicit mappings where Java and SQL names differ.
+- Existing sample-data methods in the User and Device test classes are disabled. Never enable or run them as part of routine verification. Do not assume IDs are consecutive or that simulator device IDs exist.
+
+## 6. HTTP contracts and service clients
+
+Paths below are relative to the indicated service. Gateway-exposed routes use the same paths on port `9000`.
+
+| Service | Implemented endpoints |
+| --- | --- |
+| User | `POST /api/v1/user`; `GET`, `PUT`, `DELETE /api/v1/user/{userId}` |
+| Device | `POST /api/v1/device`; `GET`, `PUT`, `DELETE /api/v1/device/{id}`; `GET /api/v1/device/user/{userId}` |
+| Ingestion | `POST /api/v1/ingestion` |
+| Usage | `GET /api/v1/usage/{userId}?days=3`; `days` defaults to 3 |
+| Insight | `GET /api/v1/insight/overview/{userId}`; `GET /api/v1/insight/saving-tips/{userId}` |
+| Alert | No REST controller; port `8084` still hosts its Spring web application |
+
+Creation returns `201`; User/Device deletion returns `204`. Ingestion returns no response body and publishes asynchronously. Its `201` does not confirm that Kafka consumption, InfluxDB storage, or alert delivery has finished.
+
+Clients currently use `RestTemplate` and direct service URLs:
+
+- Usage `DeviceClient`: `device.service.url=http://localhost:8081/api/v1/device`.
+- Usage `UserClient`: `user.service.url=http://localhost:8080/api/v1/user`.
+- Insight `UsageClient`: `usage.service.url=http://localhost:8083/api/v1/usage`.
+
+Do not route these clients through the authenticated gateway without implementing the required authentication deliberately. JWT security currently applies at the gateway; downstream HTTP services remain directly accessible in the local setup.
+
+Keep metadata and aggregation models distinct:
+
+- `DeviceResponse` describes a device and its owner.
+- `DeviceUsageResponse` contains `id`, `name`, `type`, `location`, and `energyConsumed`.
+- `UserDevicesResponse` contains `userId` and `List<DeviceUsageResponse> devices`.
+- Usage and Insight hold matching local copies of their shared HTTP response contracts. Update both sides when changing that contract; do not merge unrelated DTOs.
+
+## 7. Kafka, storage, and scheduled work
+
+### Contracts
+
+| Topic | Producer | Consumer / group | Event |
+| --- | --- | --- | --- |
+| `energy-usage` | Ingestion | Usage / `usage-service` | `EnergyUsageEvent` |
+| `energy-alerts` | Usage | Alert / `alert-service` | `AlertingEvent` |
+
+Both event classes live in **`com.projects.kafka.event`** in their respective producer and consumer projects; no shared Maven event module currently exists. Preserve matching fields, field types, package names, and JSON/type-header compatibility across copies.
+
+- `EnergyUsageEvent`: `Long deviceId`, `double energyConsumed`, `Instant timestamp`.
+- `AlertingEvent`: `Long userId`, `String message`, `double threshold`, `double energyConsumed`, `String email`.
+- HTTP `EnergyUsageRequest` is a separate class. Ingestion explicitly maps it to `EnergyUsageEvent`.
+- Timestamps are Java `Instant` values serialized as JSON strings with `@JsonFormat(shape = JsonFormat.Shape.STRING)`; do not replace the Java field with `String`.
+- Producers use `StringSerializer` / `JsonSerializer`; consumers use `StringDeserializer` / `JsonDeserializer`. Consumer type mappings include `energyUsageEvent:com.projects.kafka.event.EnergyUsageEvent` and `alertingEvent:com.projects.kafka.event.AlertingEvent` respectively. Check actual producer headers when changing mappings.
+
+### Implemented flow
+
+1. Ingestion receives a reading and publishes `EnergyUsageEvent` to `energy-usage`.
+2. Usage `consumeEnergyUsageEvent` writes an InfluxDB point: measurement `energy_usage`, tag `deviceId`, field `energyConsumed`, timestamp precision `MS`.
+3. Usage `aggregateDeviceEnergyUsage` runs **every 10 seconds**. It sums the **past hour** per device, resolves owners through Device Service, fetches users through User Service, and considers users with `alerting=true`.
+4. If a user's summed consumption is strictly greater than `energyAlertingThreshold`, Usage publishes `AlertingEvent` to `energy-alerts`.
+5. Alert `consumeAlertingEvent` calls `EmailService.sendEmail(...)`. That helper returns a boolean for SMTP success/failure.
+6. Alert persists an `Alert` with `userId`, `createdAt`, and the returned `sent` value, including failed delivery attempts.
+
+The separate `getUserDevicesUsage(userId, days)` query fetches the user's devices and sums InfluxDB values over the requested number of days. It returns an empty device list for no devices, and zero consumption for devices without readings.
+
+The simulator defaults to **10,000 requests per 60 seconds**, divided among **10 threads**, with random device IDs **1–199**. Starting Ingestion normally generates data automatically. Usage aggregation can also repeatedly publish alerts while a user remains above the threshold; there is no alert deduplication/cooldown in the current implementation.
+
+## 8. AI insights
+
+- Insight fetches the last **3 days** through `UsageClient.getUserUsage(userId, 3)`.
+- Both insight endpoints use `InsightService.createInsightResponse`. The numeric `energyUsage` is calculated in Java from device totals; the model supplies the `tips` text.
+- `OllamaConfig` creates the configured Spring AI `ChatClient`. Use that bean so the system instructions apply.
+- Current settings: model `qwen2.5:1.5b`, temperature `0.2`, `num-predict=256`, and automatic model pulling disabled with `pull-model-strategy=never`.
+- An empty device list returns explanatory text without calling Ollama. Missing usage data or blank model output raises an error.
+- Keep recorded totals distinct from daily averages. Do not invent units, tariffs, or missing data.
+
+**Known open limitation:** replies can spend the output budget listing devices and be truncated before giving useful saving tips. Prompt instructions do not guarantee the model follows them. Inspect actual answer content when validating AI work; HTTP `200` and nonempty text alone are insufficient.
+
+## 9. Gateway, security, and OpenAPI
+
+The gateway forwards `/api/v1/user/**` to `8080`, `/api/v1/device/**` to `8081`, `/api/v1/ingestion/**` to `8082`, and `/api/v1/insight/**` to `8085`. There are no Usage or Alert API routes.
+
+Each service route has a matching circuit-breaker ID (`userServiceCircuitBreaker`, `deviceServiceCircuitBreaker`, `ingestionServiceCircuitBreaker`, `insightServiceCircuitBreaker`) and its own `forward:/fallback/{service}` target. Preserve unique route IDs and fallback paths. Fallback responses are `503` with the correct service name.
+
+The Insight time limiter is **60 seconds** via `resilience4j.timelimiter.instances.insightServiceCircuitBreaker.timeoutDuration`. Other routes retain the library default time limit; read current properties before changing resilience behavior. Circuit-breaker settings live in the gateway's `application.properties`.
+
+Authentication:
+
+- Realm: `het-security-realm`; client: `home-energy-tracker-client`.
+- Issuer property: `http://localhost:8091/realms/het-security-realm`.
+- JWK-set property: `http://localhost:8091/realms/het-security-realm/protocol/openid-connect/certs`.
+- `SecurityConfig` supplies a custom `NimbusJwtDecoder` using the JWK URL. Inspect that bean before assuming an issuer/audience validation policy from properties alone.
+- Gateway API requests require a Bearer access token. The paths listed in `security.excluded.urls` permit documentation and Actuator access. Authentication does not implement per-user resource ownership checks.
+- The existing confidential client supports client credentials. Keep its secret private; do not enable additional grants or create users just to verify a route.
+
+OpenAPI:
+
+- Combined UI: `http://localhost:9000/swagger-ui.html`.
+- Forwarded definitions: `/docs/user-service/v3/api-docs`, `/docs/device-service/v3/api-docs`, `/docs/ingestion-service/v3/api-docs`, `/docs/insight-service/v3/api-docs`.
+- Each corresponding `OpenApiConfig` sets the server to `http://localhost:9000` (overridable with `gateway.url`), declares HTTP Bearer/JWT authentication, and applies the security requirement.
+- In **Authorize**, enter the access token; Swagger adds the `Bearer` prefix. **Try it out** must target the gateway.
+- Usage has separate direct documentation on `8083`; do not point it at the gateway unless a Usage route is added intentionally.
+- Gateway exposes Actuator `health`, `info`, `metrics`, and `circuitbreakers`. Useful checks: `/actuator/health` and `/actuator/circuitbreakers`. Prometheus/Grafana observability is not yet implemented at the recorded checkpoint.
+
+## 10. Coding conventions
+
+1. **No Java records.** DTOs and Kafka events use standard classes with Lombok `@Data`, `@Builder`, `@NoArgsConstructor`, and `@AllArgsConstructor`.
+2. **Uppercase `DTO` package.** Keep `*Request` and `*Response` separate. Preserve the actual service base packages and casing.
+3. **Shared Kafka package.** Keep event copies under `com.projects.kafka.event` with compatible contracts.
+4. **Plural tables.** Use `users`, `devices`, and `alerts` consistently in JPA and SQL.
+5. **Clean layering.** Controllers handle HTTP and delegate to services. Services implement business flow; repositories handle persistence. Clients handle outbound HTTP. Do not put database or AI logic in controllers.
+6. **Focused helpers.** `EmailService` sends mail and reports success; `AlertService` owns alert persistence.
+7. **Constructor injection.** Follow existing constructor/`@RequiredArgsConstructor` patterns. Use the existing Lombok builder/mapping style.
+8. **Existing error conventions.** User uses `ResponseStatusException` for missing users and duplicate emails; Device uses `DeviceNotFoundException` with `RestExceptionHandler`. Preserve meaningful HTTP statuses rather than turning failures into successful responses.
+9. **AOP scope.** User and Device have service-call logging in `AOP/LoggingAspect` and controller timing in `AOP/ExecutionTimeAspect`. Check pointcuts after package changes and avoid duplicating their logs unnecessarily.
+10. **Bounded changes.** Do not rename packages, introduce shared modules, upgrade frameworks, alter security policy, or redesign persistence as incidental cleanup.
+
+## 11. Verification and troubleshooting
+
+- For documentation-only edits, check facts, paths, and `git diff --check`; no application build is needed.
+- For implementation changes, compile/package affected services with tests skipped. Check all affected contract copies and callers.
+- For runtime work, verify required infrastructure and actual startup logs. A running Docker container alone does not prove its application is ready.
+- Use existing data for read checks. Do not generate sample users/devices, flood ingestion, send mail, or modify records just to prove startup.
+- For gateway/security changes, check missing/invalid-token `401`, valid-token forwarding, matching service-specific `503` fallbacks, and the Swagger server/security definitions. Use malformed JSON to check POST routing without producing a valid reading.
+- For AI changes, check both insight endpoints through the gateway, compare numeric usage with Usage Service, and inspect whether the generated text actually answers the requested question.
+- For alerting changes, verify both the email result and persisted `sent` status using an intentional, bounded scenario.
+- Usage currently catches InfluxDB query failures in `getUserDevicesUsage` and returns zero device totals. Check logs before treating zeros as proof of no consumption; this behavior is not a health guarantee.
+- If a port is occupied, identify its owning process and service before stopping it. Do not kill all Java processes or change agreed ports to conceal a duplicate instance.
+- If IntelliJ fails but the packaged application starts, inspect the launch configuration and injected plugins/agents before changing working Spring code.
+- If Docker reports an unknown Compose command/flag on this Mac, check Docker Desktop and its CLI-plugin configuration before editing valid YAML.
+- Before a completion claim, inspect the final diff, preserve existing work, and state exactly which checks passed. Record unresolved behavior honestly instead of calling the entire project "100% correct."

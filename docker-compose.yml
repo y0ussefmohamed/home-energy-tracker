@@ -98,17 +98,27 @@ services:
       MYSQL_DATABASE: keycloak
       MYSQL_USER: keycloak
       MYSQL_PASSWORD: password
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mysql --protocol=TCP -h 127.0.0.1 -u keycloak
+          --password="$$MYSQL_PASSWORD" "$$MYSQL_DATABASE"
+          -e 'SELECT 1' >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   keycloak:
     container_name: home-energy-keycloak
     image: quay.io/keycloak/keycloak:24.0.1
     command: [ "start-dev", "--import-realm" ]
     environment:
-      DB_VENDOR: MYSQL
-      DB_ADDR: mysql
-      DB_DATABASE: keycloak
-      DB_USER: keycloak
-      DB_PASSWORD: password
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://keycloak-db:3306/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: password
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
@@ -116,7 +126,8 @@ services:
     volumes:
       - ./docker/keycloak/realms/:/opt/keycloak/data/import/
     depends_on:
-      - keycloak-db
+      keycloak-db:
+        condition: service_healthy
 
 volumes:
   db-data:

@@ -25,15 +25,15 @@ public class UserServiceRoutes {
                 .before(uri("http://localhost:8080"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "userServiceCircuitBreaker",
-                        URI.create("forward:/fallbackRoute")
+                        URI.create("forward:/fallback/user")
                 ))
                 .build();
     }
 
     @Bean
     public RouterFunction<ServerResponse> userFallbackRoute() {
-        return route("fallbackRoute")
-                .route(RequestPredicates.path("/fallbackRoute"),
+        return route("user-service-fallback")
+                .route(RequestPredicates.path("/fallback/user"),
                         request -> ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE)
                                 .body("User service is down"))
                 .build();
