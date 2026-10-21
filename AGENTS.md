@@ -6,12 +6,12 @@ This guide applies to the entire repository. It records the implemented architec
 
 - **Do not use sub-agents or delegate implementation.**
 - **Do not create, modify, or enable tests unless the user requests it.** Existing data-population tests must remain disabled unless explicitly requested.
-- Work within the user's current lesson and requested scope. A request for a skeleton means no implementation; a request for an explanation does not authorize unrelated code changes.
+- Work within the user's requested scope. A request for a skeleton means no implementation; a request for an explanation does not authorize unrelated code changes.
 - The order of changes matters to the user. Explain changes in dependency order and identify exactly what was added.
-- Whenever the user announces a move to the next lesson, check the current project state and report mistakes before implementing the next lesson.
-- Preserve the user's intentional differences from the instructor: standard DTO classes, separate requests/responses, plural SQL tables, and existing folder/package names.
-- **Recorded checkpoint: 2026-10-21, lesson 14 monitoring is complete; the user is preparing to start lesson 15 and authorized an AI response truncation fix.** Update this checkpoint as the user advances. Do not implement future lessons automatically.
-- Instructor references: [playlist](https://www.youtube.com/playlist?list=PLJce2FcDFtxL94MVNXRzIM0WR2qNyz5i_) and [repository](https://github.com/leetjourney/home-energy-tracker). For instructor-specific questions, inspect the relevant video/transcript and lesson tag or commit. Do not copy later code from the instructor's default branch into an earlier lesson.
+- Before moving to a new development stage, check the current project state and report mistakes.
+- Preserve the user's established conventions: standard DTO classes, separate requests/responses, plural SQL tables, and existing folder/package names.
+- **Recorded checkpoint: 2026-10-21, project revision and the pre-CV review are complete; current capabilities and known limitations are documented in README.md.** Update this checkpoint when the project advances. Do not implement additional features automatically.
+- Use the checked-in implementation and approved requirements as the baseline. Consult official library documentation for version-specific behavior and keep unrelated changes out of scope.
 - Inspect Git status before editing and preserve existing work. Do not reset files, commit, or push unless requested.
 - Use the user's IntelliJ HTTP-client plugin for interactive API work; Postman is unnecessary.
 - Report what was actually verified and any remaining limitations. A successful build or HTTP response does not establish that every behavior is correct.
@@ -75,7 +75,7 @@ Stop infrastructure with `docker compose down`. Avoid `down -v`, pruning storage
 
 ## 4. Infrastructure and persistence
 
-The following credentials are existing local tutorial defaults, not production configuration. Keep client secrets, tokens, and private realm exports out of source and logs.
+The following credentials are existing local development defaults, not production configuration. Keep client secrets, tokens, and private realm exports out of source and logs.
 
 | Component | Address / container | Configuration |
 | --- | --- | --- |
@@ -105,7 +105,7 @@ The original H2 database and full realm/user exports were backed up before migra
 
 ## 5. Database and model ownership
 
-User, Device, and Alert share the application MySQL database in this tutorial. Service responsibilities remain separate; this is not a database-per-service deployment.
+User, Device, and Alert share the application MySQL database. Service responsibilities remain separate; this is not a database-per-service deployment.
 
 **Only User Service owns Flyway migrations**, under `User Service/src/main/resources/db/migration/`:
 
@@ -222,9 +222,9 @@ OpenAPI:
 - Usage has separate direct documentation on `8083`; do not point it at the gateway unless a Usage route is added intentionally.
 - Gateway exposes Actuator `health`, `info`, `metrics`, `circuitbreakers`, and `prometheus`. Useful checks: `/actuator/health`, `/actuator/circuitbreakers`, and `/actuator/prometheus`.
 
-## 10. Monitoring (lesson 14)
+## 10. Monitoring
 
-- All seven services include Actuator and `micrometer-registry-prometheus`, with versions managed by Spring Boot. The gateway already had Actuator before this lesson.
+- All seven services include Actuator and `micrometer-registry-prometheus`, with versions managed by Spring Boot.
 - All services expose `/actuator/prometheus` and add `management.metrics.tags.application=${spring.application.name}`. Preserve the user's application names; Prometheus job names use lowercase names independently.
 - The six downstream services expose `health,info,prometheus` with health details set to `when_authorized`. Preserve the gateway's additional Actuator endpoints, circuit breakers, security exclusions, and AI timeout.
 - `docker/prometheus/prometheus.yml` scrapes Prometheus itself plus the seven host-run Java applications. Docker-to-host targets use `host.docker.internal` with ports `8080`–`8085` and `9000`, not container-local `localhost`.
@@ -233,7 +233,7 @@ OpenAPI:
 - Dashboard panels cover HTTP rates by application/status, JVM heap usage, scrape target reachability, 4xx/5xx rates, and the busiest endpoints.
 - Prometheus target health is available at `http://localhost:9090/targets`; the API is `/api/v1/targets`. With all applications running, expect seven application targets plus Prometheus itself to be `UP`.
 - Scrape `UP` means the metrics endpoint is reachable; it does not prove all business flows work. Request-rate panels need traffic and at least two scrapes; an unused error series can initially have no data.
-- After dependency/property changes, reload Maven and restart the Java applications. Do not implement new Java business logic as part of this configuration lesson.
+- After dependency/property changes, reload Maven and restart the Java applications. Keep monitoring-only changes limited to the required dependencies and configuration.
 
 ## 11. Coding conventions
 

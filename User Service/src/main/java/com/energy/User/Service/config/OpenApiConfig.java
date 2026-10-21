@@ -45,8 +45,8 @@ public class OpenApiConfig {
 
     private static Contact getContact() {
         Contact contact = new Contact();
-        contact.setUrl("https://leetjourney.com");
-        contact.setEmail("leetjourney@gmail.com");
+        contact.setName("Home Energy Tracker");
+        contact.setUrl("https://github.com/y0ussefmohamed/home-energy-tracker");
         return contact;
     }
 }
