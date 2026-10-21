@@ -1,4 +1,6 @@
-# Home Energy Tracker
+# WattScope
+
+**Energy Monitoring & Insights Platform**
 
 A Spring Boot microservices application that collects household device readings, stores time-series usage, sends threshold alerts, and generates energy-saving insights with a local AI model. Seven independently run applications communicate through HTTP and Kafka, with Keycloak authentication at the API Gateway and Prometheus/Grafana monitoring.
 
@@ -75,8 +77,8 @@ Commands below use a macOS/Linux shell. In Windows terminals, adapt directory co
 ### 1. Clone and start infrastructure
 
 ```sh
-git clone https://github.com/y0ussefmohamed/home-energy-tracker.git
-cd home-energy-tracker
+git clone https://github.com/y0ussefmohamed/wattscope.git
+cd wattscope
 mkdir -p docker/keycloak/realms
 docker compose config --quiet
 docker compose up -d
@@ -87,7 +89,7 @@ Run Compose commands from this repository root. The empty realm-import directory
 
 | Component | Host address | Local development configuration |
 | --- | --- | --- |
-| Application MySQL | `localhost:3306` | Database `home_energy_tracker`; `root` / `password` |
+| Application MySQL | `localhost:3306` | Database `wattscope`; `root` / `password` |
 | Kafka | Host applications: `localhost:9094`; Docker clients: `kafka:9092` | Single-node KRaft; no ZooKeeper |
 | Kafka UI | [localhost:8070](http://localhost:8070) | Cluster `local` |
 | InfluxDB | [localhost:8072](http://localhost:8072) | `admin` / `password`; org `projects`; bucket `usage-bucket`; token `my-token` |
@@ -168,7 +170,7 @@ Start applications in this order, waiting for their startup logs before continui
 4. **Insight Service**, then **API Gateway**.
 5. **Ingestion Service**, initially with the simulator disabled as described below.
 
-Only User Service owns Flyway migrations. MySQL's initialization script creates/selects the database; it does not populate users or devices. If using MySQL Workbench, connect to `localhost:3306` with `root` / `password` and refresh `home_energy_tracker` after User Service starts.
+Only User Service owns Flyway migrations. MySQL's initialization script creates/selects the database; it does not populate users or devices. If using MySQL Workbench, connect to `localhost:3306` with `root` / `password` and refresh `wattscope` after User Service starts.
 
 **Use a quiet first run.** Ingestion normally generates **10,000 readings per minute**, with random device IDs **1–199**. On a fresh database those devices do not exist. Start it from a new terminal at the repository root with:
 
@@ -360,7 +362,7 @@ Application settings are in each service's `src/main/resources/application.prope
 
 | Setting | Default / owner |
 | --- | --- |
-| `spring.datasource.url` | `jdbc:mysql://localhost:3306/home_energy_tracker` in User, Device, Alert |
+| `spring.datasource.url` | `jdbc:mysql://localhost:3306/wattscope` in User, Device, Alert |
 | `spring.kafka.bootstrap-servers` | `localhost:9094` in Ingestion, Usage, Alert |
 | `influx.url`, `influx.org`, `influx.bucket` | `http://localhost:8072`, `projects`, `usage-bucket` in Usage |
 | `device.service.url`, `user.service.url` | Direct Device/User URLs on `8081` / `8080` in Usage |
@@ -397,7 +399,7 @@ The normal healthy response includes `"status":"UP"`. Other services expose the 
 - **Kafka:** [localhost:8070](http://localhost:8070). Inspect `energy-usage`, `energy-alerts`, and consumer groups `usage-service` / `alert-service`. Topics appear when created/requested by the applications; `energy-alerts` may not exist before alert traffic.
 - **InfluxDB:** [localhost:8072](http://localhost:8072). Use org `projects`, bucket `usage-bucket`, measurement `energy_usage`, tag `deviceId`, and field `energyConsumed`.
 - **Prometheus:** [localhost:9090/targets](http://localhost:9090/targets). Expect **eight UP targets** when all seven applications and Prometheus are running. Scrapes occur every 15 seconds; a stopped Java application is a DOWN target.
-- **Grafana:** [localhost:3000](http://localhost:3000). Open **Dashboards → Home Energy Tracker → Home Energy Tracker - Overview**. Panels show request/status/error rates, JVM heap usage, reachability, and busy endpoints. Generate intentional traffic and allow at least two scrapes for rate graphs; unused error series can initially be empty.
+- **Grafana:** [localhost:3000](http://localhost:3000). Open **Dashboards → WattScope → WattScope - Overview**. Panels show request/status/error rates, JVM heap usage, reachability, and busy endpoints. Generate intentional traffic and allow at least two scrapes for rate graphs; unused error series can initially be empty.
 - **Mailpit:** [localhost:8025](http://localhost:8025). Look for the alert from the optional walkthrough and compare it with the `alerts.sent` value in MySQL.
 
 Prometheus reaches host-run applications through `host.docker.internal`; Grafana reaches Prometheus through `http://prometheus:9090`. Both are provisioned by Compose. Prometheus reachability and nonempty AI output alone are not proof of business correctness.

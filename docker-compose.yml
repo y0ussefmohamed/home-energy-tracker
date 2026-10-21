@@ -1,11 +1,13 @@
+name: wattscope
+
 services:
   mysql:
     image: mysql:8.3.0
-    container_name: home-energy-mysql
+    container_name: wattscope-mysql
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: home_energy_tracker
+      MYSQL_DATABASE: wattscope
     ports:
       - "3306:3306"
     volumes:
@@ -15,7 +17,7 @@ services:
 
   kafka:
     image: apache/kafka:latest
-    container_name: home-energy-kafka
+    container_name: wattscope-kafka
     ports:
       - "9092:9092" # Internal listener for Docker containers
       - "9094:9094" # External listener for applications on your Mac
@@ -54,7 +56,7 @@ services:
 
   kafka-ui:
     image: ghcr.io/kafbat/kafka-ui:latest
-    container_name: home-energy-kafka-ui
+    container_name: wattscope-kafka-ui
     ports:
       - "8070:8080"
     depends_on:
@@ -67,7 +69,7 @@ services:
 
   influxdb:
     image: influxdb:2.7
-    container_name: home-energy-influxdb
+    container_name: wattscope-influxdb
     ports:
       - "8072:8086"
     environment:
@@ -83,13 +85,13 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: home-energy-mailpit
+    container_name: wattscope-mailpit
     ports:
       - "8025:8025"
       - "1025:1025"
 
   keycloak-db:
-    container_name: home-energy-keycloak-mysql
+    container_name: wattscope-keycloak-mysql
     image: mysql:8.3.0
     volumes:
       - ./volume-data/mysql_keycloak_data:/var/lib/mysql
@@ -111,7 +113,7 @@ services:
       start_period: 30s
 
   keycloak:
-    container_name: home-energy-keycloak
+    container_name: wattscope-keycloak
     image: quay.io/keycloak/keycloak:24.0.1
     command: [ "start-dev", "--import-realm" ]
     environment:
@@ -131,7 +133,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.1.0
-    container_name: home-energy-prometheus
+    container_name: wattscope-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -147,7 +149,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.4.0
-    container_name: home-energy-grafana
+    container_name: wattscope-grafana
     ports:
       - "3000:3000"
     environment:

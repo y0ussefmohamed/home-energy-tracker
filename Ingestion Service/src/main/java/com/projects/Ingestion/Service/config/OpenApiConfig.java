@@ -30,7 +30,7 @@ public class OpenApiConfig {
                 .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
                 .info(new Info()
                         .title("Ingestion Service API")
-                        .description("Ingestion service API for Home Energy Tracker Project")
+                        .description("Ingestion service API for WattScope")
                         .contact(getContact())
                         .license(getLicense())
                         .version("1.0.0"));
@@ -45,8 +45,8 @@ public class OpenApiConfig {
 
     private static Contact getContact() {
         Contact contact = new Contact();
-        contact.setName("Home Energy Tracker");
-        contact.setUrl("https://github.com/y0ussefmohamed/home-energy-tracker");
+        contact.setName("WattScope");
+        contact.setUrl("https://github.com/y0ussefmohamed/wattscope");
         return contact;
     }
 }

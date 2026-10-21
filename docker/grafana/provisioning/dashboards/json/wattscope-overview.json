@@ -445,13 +445,13 @@
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["spring-boot", "home-energy-tracker"],
+  "tags": ["spring-boot", "wattscope"],
   "templating": { "list": [] },
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Home Energy Tracker - Overview",
-  "uid": "het-overview",
+  "title": "WattScope - Overview",
+  "uid": "wattscope-overview",
   "version": 2,
   "weekStart": ""
 }

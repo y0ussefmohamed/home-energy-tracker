@@ -1,4 +1,4 @@
-# AGENTS.md — Home Energy Tracker
+# AGENTS.md — WattScope
 
 This guide applies to the entire repository. It records the implemented architecture and the user's working conventions. Verify details against the current source before changing them; update this guide when an authorized change makes it outdated.
 
@@ -10,13 +10,15 @@ This guide applies to the entire repository. It records the implemented architec
 - The order of changes matters to the user. Explain changes in dependency order and identify exactly what was added.
 - Before moving to a new development stage, check the current project state and report mistakes.
 - Preserve the user's established conventions: standard DTO classes, separate requests/responses, plural SQL tables, and existing folder/package names.
-- **Recorded checkpoint: 2026-10-21, project revision and the pre-CV review are complete; current capabilities and known limitations are documented in README.md.** Update this checkpoint when the project advances. Do not implement additional features automatically.
+- **Recorded checkpoint: 2026-10-21, project revision and the pre-CV review are complete; the project is now named WattScope. Current capabilities and known limitations are documented in README.md.** Update this checkpoint when the project advances. Do not implement additional features automatically.
 - Use the checked-in implementation and approved requirements as the baseline. Consult official library documentation for version-specific behavior and keep unrelated changes out of scope.
 - Inspect Git status before editing and preserve existing work. Do not reset files, commit, or push unless requested.
 - Use the user's IntelliJ HTTP-client plugin for interactive API work; Postman is unnecessary.
 - Report what was actually verified and any remaining limitations. A successful build or HTTP response does not establish that every behavior is correct.
 
 ## 2. Repository layout and technology
+
+The local project folder is `WattScope`, the GitHub repository is `y0ussefmohamed/wattscope`, and Docker Compose fixes its project name as `wattscope`.
 
 Each service is an independent Maven project with its own `pom.xml`, `mvnw`, and `src/`. There is no root Maven aggregator. Folder names contain spaces; quote paths in commands.
 
@@ -79,16 +81,16 @@ The following credentials are existing local development defaults, not productio
 
 | Component | Address / container | Configuration |
 | --- | --- | --- |
-| Application MySQL | `localhost:3306` / `home-energy-mysql` | MySQL 8.3.0; database `home_energy_tracker`; `root` / `password` |
-| Kafka | Host apps: `localhost:9094`; Docker clients: `kafka:9092` / `home-energy-kafka` | Single-node KRaft; controller listener `9093`; replication factor 1 |
-| Kafka UI | `http://localhost:8070` / `home-energy-kafka-ui` | Connects internally to `kafka:9092` |
-| InfluxDB | `http://localhost:8072` / `home-energy-influxdb` | InfluxDB 2.7; org `projects`; bucket `usage-bucket`; token `my-token`; retention `1w` |
-| Mailpit | SMTP `localhost:1025`; UI `http://localhost:8025` / `home-energy-mailpit` | Local captured mail; SMTP authentication and STARTTLS disabled |
+| Application MySQL | `localhost:3306` / `wattscope-mysql` | MySQL 8.3.0; database `wattscope`; `root` / `password` |
+| Kafka | Host apps: `localhost:9094`; Docker clients: `kafka:9092` / `wattscope-kafka` | Single-node KRaft; controller listener `9093`; replication factor 1 |
+| Kafka UI | `http://localhost:8070` / `wattscope-kafka-ui` | Connects internally to `kafka:9092` |
+| InfluxDB | `http://localhost:8072` / `wattscope-influxdb` | InfluxDB 2.7; org `projects`; bucket `usage-bucket`; token `my-token`; retention `1w` |
+| Mailpit | SMTP `localhost:1025`; UI `http://localhost:8025` / `wattscope-mailpit` | Local captured mail; SMTP authentication and STARTTLS disabled |
 | Ollama | `http://localhost:11434` on the host | Model `qwen2.5:1.5b`; no Compose service |
-| Keycloak | `http://localhost:8091` / `home-energy-keycloak` | Keycloak 24.0.1; local admin `admin` / `admin`; realm `het-security-realm` |
-| Keycloak MySQL | Docker-only `keycloak-db:3306` / `home-energy-keycloak-mysql` | Database `keycloak`; application account `keycloak` / `password`; separate from application MySQL |
-| Prometheus | `http://localhost:9090` / `home-energy-prometheus` | Prometheus 3.1.0; scrapes every 15 seconds; retains metrics for 5 days |
-| Grafana | `http://localhost:3000` / `home-energy-grafana` | Grafana 11.4.0; local admin `admin` / `admin`; provisioned Home Energy Tracker dashboard |
+| Keycloak | `http://localhost:8091` / `wattscope-keycloak` | Keycloak 24.0.1; local admin `admin` / `admin`; realm `het-security-realm` |
+| Keycloak MySQL | Docker-only `keycloak-db:3306` / `wattscope-keycloak-mysql` | Database `keycloak`; application account `keycloak` / `password`; separate from application MySQL |
+| Prometheus | `http://localhost:9090` / `wattscope-prometheus` | Prometheus 3.1.0; scrapes every 15 seconds; retains metrics for 5 days |
+| Grafana | `http://localhost:3000` / `wattscope-grafana` | Grafana 11.4.0; local admin `admin` / `admin`; provisioned WattScope dashboard |
 
 Persistent storage:
 
@@ -228,8 +230,8 @@ OpenAPI:
 - All services expose `/actuator/prometheus` and add `management.metrics.tags.application=${spring.application.name}`. Preserve the user's application names; Prometheus job names use lowercase names independently.
 - The six downstream services expose `health,info,prometheus` with health details set to `when_authorized`. Preserve the gateway's additional Actuator endpoints, circuit breakers, security exclusions, and AI timeout.
 - `docker/prometheus/prometheus.yml` scrapes Prometheus itself plus the seven host-run Java applications. Docker-to-host targets use `host.docker.internal` with ports `8080`–`8085` and `9000`, not container-local `localhost`.
-- Grafana provisioning files are `docker/grafana/provisioning/datasources/prometheus.yml`, `docker/grafana/provisioning/dashboards/dashboards.yml`, and `docker/grafana/provisioning/dashboards/json/het-overview.json`.
-- Grafana's data source UID is `prometheus`, URL `http://prometheus:9090`; dashboard UID is `het-overview`, title **Home Energy Tracker - Overview**, folder **Home Energy Tracker**. Keep dashboard/data-source UIDs aligned.
+- Grafana provisioning files are `docker/grafana/provisioning/datasources/prometheus.yml`, `docker/grafana/provisioning/dashboards/dashboards.yml`, and `docker/grafana/provisioning/dashboards/json/wattscope-overview.json`.
+- Grafana's data source UID is `prometheus`, URL `http://prometheus:9090`; dashboard UID is `wattscope-overview`, title **WattScope - Overview**, folder **WattScope**. Keep dashboard/data-source UIDs aligned.
 - Dashboard panels cover HTTP rates by application/status, JVM heap usage, scrape target reachability, 4xx/5xx rates, and the busiest endpoints.
 - Prometheus target health is available at `http://localhost:9090/targets`; the API is `/api/v1/targets`. With all applications running, expect seven application targets plus Prometheus itself to be `UP`.
 - Scrape `UP` means the metrics endpoint is reachable; it does not prove all business flows work. Request-rate panels need traffic and at least two scrapes; an unused error series can initially have no data.
